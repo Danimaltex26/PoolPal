@@ -91,7 +91,7 @@ export default function ReferencePage() {
       {tab === 'tools' && (
         <div className="stack">
           {/* Sub-tabs for tools */}
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
             {[
               { id: 'dosing', label: 'Chemical Dosing' },
               { id: 'lsi', label: 'LSI Calculator' },
