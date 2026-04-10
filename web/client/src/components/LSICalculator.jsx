@@ -202,8 +202,7 @@ export default function LSICalculator() {
 
       {/* Parameter Rows */}
       <div className="card" style={{ padding: '0.75rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem', paddingBottom: '0.5rem', borderBottom: '1px solid #2A2A2E' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#A0A0A8' }}>Parameter</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem', paddingBottom: '0.5rem', borderBottom: '1px solid #2A2A2E' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#14B8A6', textAlign: 'center' }}>Current</span>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#14B8A6', textAlign: 'center' }}>Desired</span>
         </div>
