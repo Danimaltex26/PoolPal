@@ -77,7 +77,66 @@ const sliderStyle = {
   height: 4,
 };
 
+// --- Dosing calculations ---
+function formatAmount(oz, unit) {
+  if (unit === 'fl oz' && oz >= 128) return `${(oz / 128).toFixed(1)} gal`;
+  if (unit === 'oz' && oz >= 16) return `${(oz / 16).toFixed(1)} lbs`;
+  return `${oz.toFixed(1)} ${unit}`;
+}
+
+function calcTreatmentPlan(current, desired, gallons) {
+  const items = [];
+  const vol = gallons || 0;
+  if (vol <= 0) return items;
+
+  // pH — raise with soda ash, lower with muriatic acid
+  const phDiff = desired.ph - current.ph;
+  if (phDiff > 0.05) {
+    // Soda ash: ~6 oz per 0.4 pH rise per 10K gal
+    const oz = (phDiff / 0.4) * 6 * (vol / 10000);
+    items.push({ chemical: 'Soda Ash (sodium carbonate)', amount: formatAmount(oz, 'oz'), direction: 'raise pH', note: 'Pre-dissolve in bucket, pour near return jet' });
+  } else if (phDiff < -0.05) {
+    // Muriatic acid: ~12 fl oz per 0.4 pH drop per 10K gal
+    const oz = (Math.abs(phDiff) / 0.4) * 12 * (vol / 10000);
+    items.push({ chemical: 'Muriatic Acid (31.45% HCl)', amount: formatAmount(oz, 'fl oz'), direction: 'lower pH', note: 'Add slowly around perimeter, pump running' });
+  }
+
+  // TA — raise with baking soda (lowering TA requires acid, already covered by pH)
+  const taDiff = desired.ta - current.ta;
+  if (taDiff > 2) {
+    // Baking soda: 2.4 oz per 1 ppm per 10K gal
+    const oz = taDiff * 2.4 * (vol / 10000);
+    items.push({ chemical: 'Baking Soda (sodium bicarbonate)', amount: formatAmount(oz, 'oz'), direction: `raise TA ${taDiff.toFixed(0)} ppm`, note: 'Max 2 lbs per 10K gal per dose, wait 6 hrs between' });
+  } else if (taDiff < -2) {
+    // Lowering TA is done with acid — note this
+    items.push({ chemical: 'Muriatic Acid (aeration method)', amount: 'See pH dose above', direction: `lower TA ${Math.abs(taDiff).toFixed(0)} ppm`, note: 'Lower pH to 7.0 with acid, then aerate to raise pH back — repeat until TA drops' });
+  }
+
+  // CH — raise with calcium chloride (no chemical to lower — dilution only)
+  const chDiff = desired.ch - current.ch;
+  if (chDiff > 5) {
+    // CaCl2 77%: 2 oz per 1 ppm per 10K gal
+    const oz = chDiff * 2.0 * (vol / 10000);
+    items.push({ chemical: 'Calcium Chloride (77%)', amount: formatAmount(oz, 'oz'), direction: `raise CH ${chDiff.toFixed(0)} ppm`, note: 'Pre-dissolve in bucket (exothermic!), never through skimmer' });
+  } else if (chDiff < -5) {
+    items.push({ chemical: 'Partial drain & refill', amount: `~${Math.round((Math.abs(chDiff) / current.ch) * 100)}% water replacement`, direction: `lower CH ${Math.abs(chDiff).toFixed(0)} ppm`, note: 'No chemical lowers CH — only dilution works' });
+  }
+
+  // CYA — raise with stabilizer (no chemical to lower — dilution only)
+  const cyaDiff = desired.cya - current.cya;
+  if (cyaDiff > 2) {
+    // CYA: 1.3 oz per 1 ppm per 10K gal
+    const oz = cyaDiff * 1.3 * (vol / 10000);
+    items.push({ chemical: 'Cyanuric Acid (stabilizer)', amount: formatAmount(oz, 'oz'), direction: `raise CYA ${cyaDiff.toFixed(0)} ppm`, note: 'Dissolve in sock in skimmer, takes 3-7 days to register' });
+  } else if (cyaDiff < -2) {
+    items.push({ chemical: 'Partial drain & refill', amount: `~${Math.round((Math.abs(cyaDiff) / current.cya) * 100)}% water replacement`, direction: `lower CYA ${Math.abs(cyaDiff).toFixed(0)} ppm`, note: 'CYA does not degrade — only leaves through water removal' });
+  }
+
+  return items;
+}
+
 export default function LSICalculator() {
+  const [poolVolume, setPoolVolume] = useState('');
   const [current, setCurrent] = useState(
     Object.fromEntries(PARAMS.map((p) => [p.key, p.default]))
   );
@@ -88,7 +147,6 @@ export default function LSICalculator() {
   const updateCurrent = (key, val) => setCurrent((prev) => ({ ...prev, [key]: parseFloat(val) || 0 }));
   const updateDesired = (key, val) => setDesired((prev) => ({ ...prev, [key]: parseFloat(val) || 0 }));
 
-  // Effective TA = TA - (CYA / 3) for LSI correction
   const effectiveTA = (ta, cya) => Math.max(ta - cya / 3, 0);
 
   const currentLSI = useMemo(() =>
@@ -103,8 +161,27 @@ export default function LSICalculator() {
   const currentColor = getLSIColor(currentLSI);
   const desiredColor = getLSIColor(desiredLSI);
 
+  const treatmentPlan = useMemo(() =>
+    calcTreatmentPlan(current, desired, parseFloat(poolVolume) || 0),
+    [current, desired, poolVolume]
+  );
+
+  const hasChanges = PARAMS.some((p) => current[p.key] !== desired[p.key]);
+
   return (
     <div className="stack">
+      {/* Pool Volume */}
+      <div className="form-group">
+        <label>Pool Volume (gallons)</label>
+        <input
+          className="input"
+          type="number"
+          placeholder="e.g. 15000"
+          value={poolVolume}
+          onChange={(e) => setPoolVolume(e.target.value)}
+        />
+      </div>
+
       {/* LSI Results */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
         <div className="card" style={{ textAlign: 'center', padding: '0.75rem' }}>
@@ -125,7 +202,6 @@ export default function LSICalculator() {
 
       {/* Parameter Rows */}
       <div className="card" style={{ padding: '0.75rem' }}>
-        {/* Header */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem', paddingBottom: '0.5rem', borderBottom: '1px solid #2A2A2E' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#A0A0A8' }}>Parameter</span>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#14B8A6', textAlign: 'center' }}>Current</span>
@@ -134,56 +210,17 @@ export default function LSICalculator() {
 
         {PARAMS.map((p) => (
           <div key={p.key} style={{ marginBottom: '0.875rem' }}>
-            {/* Label */}
             <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#A0A0A8', marginBottom: '0.25rem' }}>
               {p.label}
             </div>
-
-            {/* Inputs row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.25rem' }}>
-              <input
-                type="number"
-                style={inputStyle}
-                value={current[p.key]}
-                step={p.step}
-                min={p.min}
-                max={p.max}
-                onChange={(e) => updateCurrent(p.key, e.target.value)}
-              />
-              <input
-                type="number"
-                style={inputStyle}
-                value={desired[p.key]}
-                step={p.step}
-                min={p.min}
-                max={p.max}
-                onChange={(e) => updateDesired(p.key, e.target.value)}
-              />
+              <input type="number" style={inputStyle} value={current[p.key]} step={p.step} min={p.min} max={p.max} onChange={(e) => updateCurrent(p.key, e.target.value)} />
+              <input type="number" style={inputStyle} value={desired[p.key]} step={p.step} min={p.min} max={p.max} onChange={(e) => updateDesired(p.key, e.target.value)} />
             </div>
-
-            {/* Sliders row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              <input
-                type="range"
-                style={sliderStyle}
-                value={current[p.key]}
-                min={p.min}
-                max={p.max}
-                step={p.step}
-                onChange={(e) => updateCurrent(p.key, e.target.value)}
-              />
-              <input
-                type="range"
-                style={sliderStyle}
-                value={desired[p.key]}
-                min={p.min}
-                max={p.max}
-                step={p.step}
-                onChange={(e) => updateDesired(p.key, e.target.value)}
-              />
+              <input type="range" style={sliderStyle} value={current[p.key]} min={p.min} max={p.max} step={p.step} onChange={(e) => updateCurrent(p.key, e.target.value)} />
+              <input type="range" style={sliderStyle} value={desired[p.key]} min={p.min} max={p.max} step={p.step} onChange={(e) => updateDesired(p.key, e.target.value)} />
             </div>
-
-            {/* Min/Max labels */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
               <div className="row-between" style={{ gap: 0 }}>
                 <span style={{ fontSize: '0.625rem', color: '#6B6B73' }}>{p.min}</span>
@@ -197,6 +234,32 @@ export default function LSICalculator() {
           </div>
         ))}
       </div>
+
+      {/* Treatment Plan */}
+      {hasChanges && (
+        <div className="card" style={{ padding: '0.75rem' }}>
+          <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem' }}>Chemical Treatment Plan</h3>
+
+          {!poolVolume || parseFloat(poolVolume) <= 0 ? (
+            <p className="text-secondary" style={{ fontSize: '0.875rem' }}>Enter pool volume above to calculate dosing amounts.</p>
+          ) : treatmentPlan.length === 0 ? (
+            <p className="text-secondary" style={{ fontSize: '0.875rem' }}>No chemical adjustments needed.</p>
+          ) : (
+            <div className="stack-sm">
+              {treatmentPlan.map((item, i) => (
+                <div key={i} style={{ padding: '0.625rem', backgroundColor: '#0D0D0F', borderRadius: 8, border: '1px solid #2A2A2E' }}>
+                  <div className="row-between" style={{ marginBottom: 4 }}>
+                    <strong style={{ fontSize: '0.875rem' }}>{item.chemical}</strong>
+                    <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#14B8A6' }}>{item.amount}</span>
+                  </div>
+                  <div style={{ fontSize: '0.8125rem', color: '#A0A0A8', marginBottom: 2 }}>{item.direction}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#6B6B73' }}>{item.note}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Reference guide */}
       <div className="card" style={{ fontSize: '0.8125rem', color: '#A0A0A8', padding: '0.75rem' }}>
