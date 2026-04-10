@@ -70,12 +70,7 @@ const inputStyle = {
   outline: 'none',
 };
 
-const sliderStyle = {
-  width: '100%',
-  accentColor: '#14B8A6',
-  cursor: 'pointer',
-  height: 4,
-};
+const sliderStyle = {};
 
 // --- Dosing calculations ---
 function formatAmount(oz, unit) {
