@@ -49,7 +49,7 @@ const TABS = [
 
 export default function ReferencePage() {
   const [tab, setTab] = useState('tools');
-  const [toolTab, setToolTab] = useState('dosing');
+  const [toolTab, setToolTab] = useState('lsi');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -93,8 +93,8 @@ export default function ReferencePage() {
           {/* Sub-tabs for tools */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
             {[
-              { id: 'dosing', label: 'Chemical Dosing' },
               { id: 'lsi', label: 'LSI Calculator' },
+              { id: 'dosing', label: 'Chemical Dosing' },
               { id: 'fccya', label: 'FC / CYA Chart' },
               { id: 'ranges', label: 'Quick Ranges' },
             ].map((t) => (
