@@ -80,19 +80,36 @@ router.post("/query", auth, async (req, res) => {
     // Step 2 — Claude
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: REFERENCE_SYSTEM_PROMPT,
       messages: [{ role: "user", content: query }],
     });
 
+    if (message.stop_reason === "max_tokens") {
+      console.error("Reference response truncated (max_tokens)");
+      return res.status(500).json({ error: "AI response was too long. Please try a more specific question." });
+    }
+
     const rawText = message.content[0].text;
     let result;
     try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found");
-      result = JSON.parse(jsonMatch[0]);
+      const stripped = rawText.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+      try {
+        result = JSON.parse(stripped);
+      } catch {
+        const start = stripped.indexOf("{");
+        if (start === -1) throw new Error("No JSON found");
+        let depth = 0;
+        let end = -1;
+        for (let i = start; i < stripped.length; i++) {
+          if (stripped[i] === "{") depth++;
+          else if (stripped[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
+        }
+        if (end === -1) throw new Error("Unbalanced JSON");
+        result = JSON.parse(stripped.slice(start, end + 1));
+      }
     } catch (parseErr) {
-      console.error("Reference parse error:", rawText);
+      console.error("Reference parse error:", parseErr.message, rawText);
       return res.status(500).json({ error: "Failed to parse reference result", raw: rawText });
     }
 

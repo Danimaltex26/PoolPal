@@ -81,19 +81,36 @@ router.post("/", auth, upload.array("images", 4), async (req, res) => {
 
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: POOL_ANALYSIS_SYSTEM_PROMPT,
       messages: [{ role: "user", content: imageContent }],
     });
 
+    if (message.stop_reason === "max_tokens") {
+      console.error("Analysis response truncated (max_tokens)");
+      return res.status(500).json({ error: "AI response was too long. Please try again." });
+    }
+
     const rawText = message.content[0].text;
     let result;
     try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found");
-      result = JSON.parse(jsonMatch[0]);
+      const stripped = rawText.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+      try {
+        result = JSON.parse(stripped);
+      } catch {
+        const start = stripped.indexOf("{");
+        if (start === -1) throw new Error("No JSON found");
+        let depth = 0;
+        let end = -1;
+        for (let i = start; i < stripped.length; i++) {
+          if (stripped[i] === "{") depth++;
+          else if (stripped[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
+        }
+        if (end === -1) throw new Error("Unbalanced JSON");
+        result = JSON.parse(stripped.slice(start, end + 1));
+      }
     } catch (parseErr) {
-      console.error("Parse error:", rawText);
+      console.error("Parse error:", parseErr.message, rawText);
       return res.status(500).json({ error: "Failed to parse analysis result", raw: rawText });
     }
 
