@@ -212,7 +212,7 @@ export default function LSICalculator() {
             <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#A0A0A8', marginBottom: '0.25rem' }}>
               {p.label}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <input type="number" style={inputStyle} value={current[p.key]} step={p.step} min={p.min} max={p.max} onChange={(e) => updateCurrent(p.key, e.target.value)} />
               <input type="number" style={inputStyle} value={desired[p.key]} step={p.step} min={p.min} max={p.max} onChange={(e) => updateDesired(p.key, e.target.value)} />
             </div>
