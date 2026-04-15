@@ -83,7 +83,7 @@ export async function analyzePoolPhoto(params) {
     userNotes
   });
 
-  // MODEL: claude-sonnet-4-6
+  // MODEL: claude-sonnet-4-20250514
   // Photo diagnosis always uses Sonnet — vision quality matters here.
   // temperature: 0.2 — consistent, precise diagnosis
   // max_tokens: 1600 — chemical test analysis with multiple parameters
@@ -98,7 +98,7 @@ export async function analyzePoolPhoto(params) {
       attempt++;
 
       response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 1600,
         temperature: 0.2,
         system: POOLPAL_SYSTEM_PROMPT,
