@@ -2,9 +2,8 @@ import { Router } from "express";
 import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import auth from "../middleware/auth.js";
-import { callClaude } from "../utils/claudeClient.js";
-import { POOL_ANALYSIS_SYSTEM_PROMPT } from "../prompts/analysis.js";
 import { sendAnalysisReadyEmail } from "../utils/email.js";
+import { analyzePoolPhoto } from "../utils/poolAnalyzer.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 4 * 1024 * 1024 } });
@@ -42,7 +41,6 @@ router.post("/", auth, upload.array("images", 4), async (req, res) => {
       return res.status(400).json({ error: "At least one image is required" });
     }
 
-    const imageContent = [];
     const publicUrls = [];
 
     for (const file of req.files) {
@@ -62,49 +60,33 @@ router.post("/", auth, upload.array("images", 4), async (req, res) => {
         .from("poolpal-uploads")
         .getPublicUrl(storagePath);
       publicUrls.push(urlData.publicUrl);
-
-      imageContent.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: file.mimetype || "image/jpeg",
-          data: file.buffer.toString("base64"),
-        },
-      });
     }
 
-    imageContent.push({
-      type: "text",
-      text: `Analyze this pool/spa photo. Analysis type hint: ${analysis_type || "general"}. Return your analysis as the specified JSON object.`,
-    });
-
-    var aiResult = await callClaude({
-      feature: 'photo_diagnosis',
-      systemPrompt: POOL_ANALYSIS_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: imageContent }],
-    });
-    var rawText = aiResult.content;
-    let result;
+    // CLAUDE API CALL: pool photo analysis — see /server/utils/poolAnalyzer.js
+    let analysisResult;
     try {
-      const stripped = rawText.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-      try {
-        result = JSON.parse(stripped);
-      } catch {
-        const start = stripped.indexOf("{");
-        if (start === -1) throw new Error("No JSON found");
-        let depth = 0;
-        let end = -1;
-        for (let i = start; i < stripped.length; i++) {
-          if (stripped[i] === "{") depth++;
-          else if (stripped[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
-        }
-        if (end === -1) throw new Error("Unbalanced JSON");
-        result = JSON.parse(stripped.slice(start, end + 1));
+      analysisResult = await analyzePoolPhoto({
+        imageBase64: req.files[0].buffer.toString("base64"),
+        imageMediaType: req.files[0].mimetype || "image/jpeg",
+        analysisType: analysis_type,
+        poolType: req.body.pool_type,
+        poolVolume: req.body.pool_volume,
+        surfaceType: req.body.surface_type,
+        sanitizerType: req.body.sanitizer_type,
+        symptoms: req.body.symptoms,
+        userNotes: req.body.user_notes,
+        userId,
+      });
+    } catch (error) {
+      if (error.type === 'api_error' || error.type === 'parse_error' || error.type === 'validation_error') {
+        return res.status(error.status || 500).json({
+          error: error.userMessage || 'Analysis failed. Please try again.'
+        });
       }
-    } catch (parseErr) {
-      console.error("Parse error:", parseErr.message, rawText);
-      return res.status(500).json({ error: "Failed to parse analysis result", raw: rawText });
+      throw error;
     }
+
+    const { analysis: result } = analysisResult;
 
     const { data: saved, error: saveError } = await supabaseService
       .from("pool_analyses")
@@ -112,8 +94,8 @@ router.post("/", auth, upload.array("images", 4), async (req, res) => {
         user_id: userId,
         image_urls: publicUrls,
         analysis_type: result.analysis_type || analysis_type || "general",
-        diagnosis: result.overall_diagnosis || result.plain_english_summary,
-        recommended_action: result.recommended_action,
+        diagnosis: result.assessment_reasoning || result.overall_assessment,
+        recommended_action: result.prioritized_actions?.[0]?.action || null,
         confidence: result.confidence,
         full_response_json: result,
         saved: false,
@@ -123,7 +105,7 @@ router.post("/", auth, upload.array("images", 4), async (req, res) => {
 
     if (saveError) {
       console.error("Save error:", saveError);
-      return res.json({ result, saved: false, save_error: saveError.message, model: aiResult.model });
+      return res.json({ result, saved: false, save_error: saveError.message, model: analysisResult.model });
     }
 
     // Only send email for offline-queued analyses
@@ -136,7 +118,7 @@ router.post("/", auth, upload.array("images", 4), async (req, res) => {
       }).catch(() => {});
     }
 
-    return res.json({ result, record_id: saved.id, model: aiResult.model });
+    return res.json({ result, record_id: saved.id, model: analysisResult.model });
   } catch (err) {
     console.error("Pool analysis error:", err);
     return res.status(500).json({ error: "Internal server error" });
