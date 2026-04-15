@@ -46,21 +46,53 @@ const SAFETY_KEYWORDS = [
   'fall', 'crush', 'entrap', 'interlock', 'governor',
 ];
 
+/**
+ * Determines complexity of a PoolPal troubleshoot request.
+ * Routes to complex_troubleshoot (Sonnet) when any signal indicates
+ * the problem requires chemistry calculations or advanced equipment knowledge.
+ *
+ * Signals that escalate to Sonnet:
+ *   - Multi-turn conversation (follow-up)
+ *   - Chemistry readings provided (quantitative water balance diagnosis)
+ *   - Commercial pool (stricter health code standards)
+ *   - Specialty sanitizer system (SWG, bromine, UV/ozone)
+ *   - Pool volume known (enables dosing calculations)
+ *   - 2+ already-tried steps (basic remediation exhausted)
+ *   - Safety-critical symptom keywords
+ */
 function classifyTroubleshoot(params) {
-  var {
+  const {
     conversationHistory = [],
     symptom = '',
-    requiresCodeCompliance = false,
-    isSpecialtyMaterial = false,
+    hasChemistryReadings = false,
+    isCommercial = false,
+    isSpecialtySanitizer = false,
+    hasPoolVolume = false,
+    alreadyTriedMultiple = false,
   } = params;
 
-  var symptomLower = symptom.toLowerCase();
-  var isSafetyCritical = SAFETY_KEYWORDS.some(function (kw) {
-    return symptomLower.includes(kw);
-  });
-  var isMultiTurn = conversationHistory.length > 0;
-  var isComplex = isMultiTurn || requiresCodeCompliance ||
-                  isSpecialtyMaterial || isSafetyCritical;
+  const safetyCriticalKeywords = [
+    'entrapment', 'drain', 'suction', 'stuck', 'electric',
+    'shock', 'bonding', 'gfci', 'algae bloom', 'green',
+    'black algae', 'e. coli', 'bacteria', 'health department',
+    'closed', 'leak', 'flooding', 'acid', 'chlorine gas',
+  ];
+
+  const isSafetyCritical = safetyCriticalKeywords.some(
+    kw => symptom.toLowerCase().includes(kw)
+  );
+
+  const isMultiTurn = conversationHistory.length > 0;
+
+  const isComplex = (
+    isMultiTurn          ||  // follow-up = context-dependent reasoning
+    hasChemistryReadings ||  // readings provided = quantitative diagnosis
+    isCommercial         ||  // commercial = health code standards
+    isSpecialtySanitizer ||  // SWG/bromine/UV = system-specific knowledge
+    hasPoolVolume        ||  // volume known = dosing calculations
+    alreadyTriedMultiple ||  // exhausted basics = non-obvious cause
+    isSafetyCritical         // safety keywords = no shortcuts
+  );
 
   return isComplex ? 'complex_troubleshoot' : 'simple_troubleshoot';
 }
