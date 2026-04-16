@@ -142,7 +142,7 @@ export default function ExamEngine() {
   if (error) return <div className="page"><div className="error-banner">{error}</div><button className="btn btn-ghost" style={{ marginTop: '1rem' }} onClick={() => navigate(-1)}>&larr; Go back</button></div>;
   if (questions.length === 0) return <div className="page" style={{ textAlign: 'center', paddingTop: '3rem' }}><p className="text-muted">No questions available for this mode.</p><button className="btn btn-ghost" style={{ marginTop: '1rem' }} onClick={() => navigate(-1)}>&larr; Go back</button></div>;
 
-  if (showReview && isExamMode) return <ReviewGrid questions={questions} answers={answers} flagged={flagged} onJump={(i) => { setCurrent(i); setShowReview(false); }} onSubmit={() => setShowConfirm(true)} />;
+  if (showReview && isExamMode) return <ReviewGrid questions={questions} answers={answers} flagged={flagged} onJump={(i) => { setCurrent(i); setShowReview(false); }} onSubmit={() => { setShowReview(false); setShowConfirm(true); }} />;
 
   if (showConfirm) {
     const unanswered = questions.filter((_, i) => answers[i] == null).length;
@@ -154,7 +154,7 @@ export default function ExamEngine() {
           <p className="text-secondary" style={{ marginBottom: '1.5rem' }}>This cannot be undone.</p>
           <div className="stack-sm">
             <button className="btn btn-primary btn-block" onClick={submitExam}>Yes, Submit</button>
-            <button className="btn btn-secondary btn-block" onClick={() => setShowConfirm(false)}>Go Back</button>
+            <button className="btn btn-secondary btn-block" onClick={() => { setShowConfirm(false); setShowReview(true); }}>Go Back</button>
           </div>
         </div>
       </div>
