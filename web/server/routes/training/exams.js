@@ -261,7 +261,7 @@ router.post("/exam/submit", async (req, res) => {
       ? Math.round((new Date(now).getTime() - new Date(examState.started_at).getTime()) / 1000)
       : null;
 
-    await supabase
+    const { data: attemptRow } = await supabase
       .from("training_exam_attempts")
       .insert({
         user_id: userId,
@@ -279,7 +279,9 @@ router.post("/exam/submit", async (req, res) => {
         questions_detail: questionsDetail,
         started_at: examState.started_at,
         completed_at: now,
-      });
+      })
+      .select("id")
+      .single();
 
     await supabase
       .from("training_test_sessions")
@@ -308,6 +310,7 @@ router.post("/exam/submit", async (req, res) => {
     }
 
     res.json({
+      attempt_id: attemptRow?.id,
       attemptNumber,
       totalQuestions,
       correctCount: totalCorrect,

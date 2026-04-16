@@ -91,7 +91,7 @@ export default function ExamEngine() {
       try {
         let data;
         if (isSR) { data = await apiGet('/training/sr/queue'); setQuestions(data.questions || []); }
-        else if (isExamMode) { data = await apiPost('/training/exam/start', { cert_level: certLevel, mode }); setQuestions(data.questions || []); setExamMeta(data.meta || {}); setAttemptId(data.attempt_id); }
+        else if (isExamMode) { data = await apiPost('/training/exam/start', { cert_level: certLevel, mode }); setQuestions(data.questions || []); setExamMeta(data.meta || {}); setAttemptId(data.examStateId); }
         else { data = await apiPost('/training/practice/start', { cert_level: certLevel, mode }); setQuestions(data.questions || []); }
       } catch (err) { setError(err.message); } finally { setLoading(false); }
     }
@@ -100,7 +100,7 @@ export default function ExamEngine() {
 
   useEffect(() => {
     if (!isExamMode || !attemptId) return;
-    saveTimerRef.current = setInterval(() => { apiPost('/training/exam/save-state', { attempt_id: attemptId, answers, flagged, current_index: current }).catch(() => {}); }, 5000);
+    saveTimerRef.current = setInterval(() => { apiPost('/training/exam/save-state', { examStateId: attemptId, answersJson: answers, currentQuestionIndex: current, reviewFlaggedIds: Object.keys(flagged).filter((k) => flagged[k]).map(Number) }).catch(() => {}); }, 5000);
     return () => clearInterval(saveTimerRef.current);
   }, [isExamMode, attemptId, answers, flagged, current]);
 
@@ -123,7 +123,7 @@ export default function ExamEngine() {
 
   async function submitExam() {
     clearInterval(saveTimerRef.current);
-    try { const resp = await apiPost('/training/exam/submit', { attempt_id: attemptId, answers, cert_level: certLevel, mode }); navigate(`/training/${certLevel}/exam/score/${resp.attempt_id || attemptId}`); }
+    try { const resp = await apiPost('/training/exam/submit', { examStateId: attemptId }); navigate(`/training/${certLevel}/exam/score/${resp.attempt_id || attemptId}`); }
     catch { navigate(`/training/${certLevel}/exam`); }
   }
 
