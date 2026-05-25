@@ -155,6 +155,10 @@ export default function TroubleshootPage() {
   const [followUp, setFollowUp] = useState('');
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUps, setFollowUps] = useState([]);
+  // Tracks "Other (not listed)" selection separately from form.equipment_brand.
+  // Without this, typing in the free-text input overwrote the '__other' sentinel
+  // and unmounted the input mid-keystroke, resetting the form.
+  const [brandIsOther, setBrandIsOther] = useState(false);
 
   const set = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -216,6 +220,7 @@ export default function TroubleshootPage() {
     setSessionId(null);
     setFollowUp('');
     setFollowUps([]);
+    setBrandIsOther(false);
     setForm({
       equipment_type: '',
       equipment_brand: '',
@@ -532,6 +537,7 @@ export default function TroubleshootPage() {
             onChange={(e) => {
               set('equipment_type', e.target.value);
               set('equipment_brand', '');
+              setBrandIsOther(false);
             }}
           >
             <option value="">Select...</option>
@@ -542,17 +548,29 @@ export default function TroubleshootPage() {
         {brandOptions.length > 0 ? (
           <div className="form-group">
             <label>Equipment Brand / Model</label>
-            <select className="select" value={form.equipment_brand} onChange={(e) => set('equipment_brand', e.target.value)}>
+            <select
+              className="select"
+              value={brandIsOther ? '__other' : form.equipment_brand}
+              onChange={(e) => {
+                if (e.target.value === '__other') {
+                  setBrandIsOther(true);
+                  set('equipment_brand', '');
+                } else {
+                  setBrandIsOther(false);
+                  set('equipment_brand', e.target.value);
+                }
+              }}
+            >
               <option value="">Select...</option>
               {brandOptions.map((b) => <option key={b} value={b}>{b}</option>)}
               <option value="__other">Other (not listed)</option>
             </select>
-            {form.equipment_brand === '__other' && (
+            {brandIsOther && (
               <input
                 className="input"
                 style={{ marginTop: '0.5rem' }}
                 placeholder="Type brand / model"
-                value=""
+                value={form.equipment_brand}
                 onChange={(e) => set('equipment_brand', e.target.value)}
               />
             )}
