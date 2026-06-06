@@ -117,7 +117,7 @@ router.post("/", auth, upload.array("images", 4), async (req, res) => {
 
     // Only send email for offline-queued analyses
     if (req.body.queued) {
-      sendAnalysisReadyEmail({
+      await sendAnalysisReadyEmail({
         to: req.user.email,
         appKey: "poolpal",
         displayName: req.profile.display_name,
